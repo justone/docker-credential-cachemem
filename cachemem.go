@@ -2,51 +2,107 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/docker/docker-credential-helpers/credentials"
+	"time"
 )
 
-type CredHandler struct {
-	*CacheMem
-}
+func NewCacheMem(mode string) *CacheMem {
+	system := &DefaultSystem{}
 
-func (c CredHandler) Add(creds *credentials.Credentials) error {
-	cl, _ := c.Client()
-
-	if err := cl.Add(creds.ServerURL, creds.Username, creds.Secret); err != nil {
-		return fmt.Errorf("error adding credentials")
+	var transp Transport
+	if mode == "grpc" {
+		transp = &GRPCTransport{System: system}
 	}
 
-	return nil
+	return &CacheMem{
+		system,
+		transp,
+		make(chan bool),
+		make(chan bool),
+		make(map[string]cred),
+	}
 }
 
-func (c CredHandler) Delete(serverURL string) error {
-	cl, _ := c.Client()
-
-	if err := cl.Delete(serverURL); err != nil {
-		return fmt.Errorf("error getting credentials")
-	}
-	return nil
+type Client interface {
+	Add(string, string, string) error
+	Delete(string) error
+	Get(string) (string, string, error)
+	List() (map[string]string, error)
+	Send(Request) (interface{}, error)
 }
 
-func (c CredHandler) Get(serverURL string) (string, string, error) {
-	cl, _ := c.Client()
-
-	user, secret, err := cl.Get(serverURL)
-	if err != nil {
-		return "", "", err
-	}
-
-	return user, secret, nil
+type Transport interface {
+	Initialize(*CacheMem) error
+	Shutdown(*CacheMem) error
+	Client(*CacheMem) (Client, error)
 }
 
-func (c CredHandler) List() (map[string]string, error) {
-	cl, _ := c.Client()
+type CacheMem struct {
+	System
+	Transport
+	done, alive chan bool
+	creds       map[string]cred
+}
 
-	ret, err := cl.List()
-	if err != nil {
-		return nil, fmt.Errorf("error listing credentials")
+func (gd *CacheMem) Done() {
+	gd.done <- true
+}
+
+func (gd *CacheMem) Alive() {
+	gd.alive <- true
+}
+
+func (gd *CacheMem) Creds() map[string]cred {
+	return gd.creds
+}
+
+func (gd *CacheMem) Client() (Client, error) {
+	return gd.Transport.Client(gd)
+}
+
+func (gd *CacheMem) Run() {
+	gd.Transport.Initialize(gd)
+
+	go func() {
+		for {
+			select {
+			case <-gd.alive:
+				fmt.Println("keeping alive longer")
+			case <-time.After(60 * time.Second):
+				fmt.Println("stopping because of timeout")
+				gd.done <- true
+				return
+			}
+		}
+	}()
+
+	fmt.Println("waiting for done")
+	<-gd.done
+	fmt.Println("done received")
+	gd.Transport.Shutdown(gd)
+
+	fmt.Println("all done")
+}
+
+type cred struct {
+	username, secret string
+}
+
+type Request struct {
+	Command, ServerURL, Username, Secret string
+}
+
+func (gd *CacheMem) Stop() {
+	cl, _ := gd.Client()
+
+	if _, err := cl.Send(Request{Command: "stop"}); err != nil {
+		fmt.Println("error stopping daemon")
 	}
+}
 
-	return ret, nil
+func (gd *CacheMem) Bump() {
+	cl, _ := gd.Client()
+
+	if _, err := cl.Send(Request{Command: "bump"}); err != nil {
+		fmt.Println("error bumping daemon")
+	}
 }
