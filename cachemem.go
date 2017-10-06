@@ -6,69 +6,47 @@ import (
 	"github.com/docker/docker-credential-helpers/credentials"
 )
 
-type CacheMem struct{}
+type CredHandler struct {
+	*CacheMem
+}
 
-func (c CacheMem) Add(creds *credentials.Credentials) error {
-	cl := newClient()
+func (c CredHandler) Add(creds *credentials.Credentials) error {
+	cl, _ := c.Client()
 
-	if _, err := cl.Call(Request{
-		"add",
-		creds.ServerURL,
-		creds.Username,
-		creds.Secret,
-	}); err != nil {
-		fmt.Println(err)
+	if err := cl.Add(creds.ServerURL, creds.Username, creds.Secret); err != nil {
 		return fmt.Errorf("error adding credentials")
 	}
 
 	return nil
 }
 
-func (c CacheMem) Delete(serverURL string) error {
-	cl := newClient()
+func (c CredHandler) Delete(serverURL string) error {
+	cl, _ := c.Client()
 
-	if _, err := cl.Call(Request{
-		Command:   "delete",
-		ServerURL: serverURL,
-	}); err != nil {
+	if err := cl.Delete(serverURL); err != nil {
 		return fmt.Errorf("error getting credentials")
 	}
 	return nil
 }
 
-func (c CacheMem) Get(serverURL string) (string, string, error) {
-	cl := newClient()
+func (c CredHandler) Get(serverURL string) (string, string, error) {
+	cl, _ := c.Client()
 
-	ret, err := cl.Call(Request{
-		Command:   "get",
-		ServerURL: serverURL,
-	})
+	user, secret, err := cl.Get(serverURL)
 	if err != nil {
-		fmt.Println(err)
-		return "", "", fmt.Errorf("error getting credentials")
+		return "", "", err
 	}
 
-	fmt.Println(ret)
-	retMap := ret.(map[string]string)
-
-	fmt.Println(retMap)
-
-	if _, ok := retMap["Username"]; !ok {
-		return "", "", credentials.NewErrCredentialsNotFound()
-	}
-
-	return retMap["Username"], retMap["Secret"], nil
+	return user, secret, nil
 }
 
-func (c CacheMem) List() (map[string]string, error) {
-	cl := newClient()
+func (c CredHandler) List() (map[string]string, error) {
+	cl, _ := c.Client()
 
-	ret, err := cl.Call(Request{
-		Command: "list",
-	})
+	ret, err := cl.List()
 	if err != nil {
 		return nil, fmt.Errorf("error listing credentials")
 	}
 
-	return ret.(map[string]string), nil
+	return ret, nil
 }

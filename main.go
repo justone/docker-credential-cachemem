@@ -2,72 +2,102 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
 	"github.com/docker/docker-credential-helpers/credentials"
-	"github.com/valyala/gorpc"
 )
-
-func init() {
-	gorpc.RegisterType(Request{})
-	gorpc.RegisterType(map[string]string{})
-}
 
 func main() {
 	mode := "grpc"
 
-	var daemon Daemon
-	if mode == "grpc" {
-		daemon = &GRPCDaemon{}
-	}
+	cm := NewCacheMem(mode)
 
 	if len(os.Args) > 1 && os.Args[1] == "daemon" {
-		daemon.Run()
+		cm.Run()
 	} else if len(os.Args) > 1 && os.Args[1] == "stop" {
-		daemon.Stop()
+		cm.Stop()
 	} else if len(os.Args) > 1 && os.Args[1] == "bump" {
-		daemon.Bump()
+		cm.Bump()
 	} else {
-		credentials.Serve(CacheMem{})
+		credentials.Serve(CredHandler{cm})
 	}
 }
 
-type Daemon interface {
-	Run()
-	Stop()
-	Bump()
+func NewCacheMem(mode string) *CacheMem {
+	system := &DefaultSystem{}
+
+	var transp Transport
+	if mode == "grpc" {
+		transp = &GRPCTransport{System: system}
+	}
+
+	return &CacheMem{
+		system,
+		transp,
+		make(chan bool),
+		make(chan bool),
+		make(map[string]cred),
+	}
 }
 
-type GRPCDaemon struct{}
+type Client interface {
+	Add(string, string, string) error
+	Delete(string) error
+	Get(string) (string, string, error)
+	List() (map[string]string, error)
+	Send(Request) (interface{}, error)
+}
 
-func (gd *GRPCDaemon) Run() {
-	fn, done, alive := initDispatcher()
-	server := gorpc.NewUnixServer("/tmp/transport.sock", fn)
+type Transport interface {
+	Initialize(*CacheMem) error
+	Shutdown(*CacheMem) error
+	Client(*CacheMem) (Client, error)
+}
 
-	fmt.Println("starting")
-	if err := server.Start(); err != nil {
-		log.Fatalf("Cannot start rpc server: %s", err)
-	}
+type CacheMem struct {
+	System
+	Transport
+	done, alive chan bool
+	creds       map[string]cred
+}
+
+func (gd *CacheMem) Done() {
+	gd.done <- true
+}
+
+func (gd *CacheMem) Alive() {
+	gd.alive <- true
+}
+
+func (gd *CacheMem) Creds() map[string]cred {
+	return gd.creds
+}
+
+func (gd *CacheMem) Client() (Client, error) {
+	return gd.Transport.Client(gd)
+}
+
+func (gd *CacheMem) Run() {
+	gd.Transport.Initialize(gd)
 
 	go func() {
 		for {
 			select {
-			case <-alive:
+			case <-gd.alive:
 				fmt.Println("keeping alive longer")
 			case <-time.After(60 * time.Second):
 				fmt.Println("stopping because of timeout")
-				done <- true
+				gd.done <- true
 				return
 			}
 		}
 	}()
 
 	fmt.Println("waiting for done")
-	<-done
+	<-gd.done
 	fmt.Println("done received")
-	server.Stop()
+	gd.Transport.Shutdown(gd)
 
 	fmt.Println("all done")
 }
@@ -80,84 +110,18 @@ type Request struct {
 	Command, ServerURL, Username, Secret string
 }
 
-func initDispatcher() (func(string, interface{}) interface{}, chan bool, chan bool) {
-	done := make(chan bool)
-	alive := make(chan bool)
+func (gd *CacheMem) Stop() {
+	cl, _ := gd.Client()
 
-	credStore := make(map[string]cred)
-
-	return func(clientAddr string, request interface{}) interface{} {
-		fmt.Println("got request", request)
-
-		// keep daemon alive
-		alive <- true
-
-		switch request.(type) {
-		case string:
-			return request
-		case Request:
-			req := request.(Request)
-			fmt.Println(req.Command)
-			switch req.Command {
-			case "add":
-				credStore[req.ServerURL] = cred{req.Username, req.Secret}
-			case "delete":
-				delete(credStore, req.ServerURL)
-			case "get":
-				ret := map[string]string{
-					"ServerURL": req.ServerURL,
-				}
-
-				if cred, ok := credStore[req.ServerURL]; ok {
-					ret["Username"] = cred.username
-					ret["Secret"] = cred.secret
-				}
-				fmt.Println("returning", ret)
-				return ret
-			case "list":
-				creds := make(map[string]string)
-
-				for server, cred := range credStore {
-					creds[server] = cred.username
-				}
-
-				return creds
-			case "alive":
-				// nothing
-			case "stop":
-				// nothing
-				go func() {
-					time.Sleep(time.Second)
-					done <- true
-				}()
-			}
-		}
-		return nil
-	}, done, alive
-}
-
-func newClient() *gorpc.Client {
-
-	gorpc.SetErrorLogger(gorpc.NilErrorLogger)
-	client := gorpc.NewUnixClient("/tmp/transport.sock")
-	client.RequestTimeout = 100 * time.Millisecond
-	client.Start()
-
-	return client
-}
-
-func (gd *GRPCDaemon) Stop() {
-	cl := newClient()
-
-	if _, err := cl.Call("stop"); err != nil {
+	if _, err := cl.Send(Request{Command: "stop"}); err != nil {
 		fmt.Println("error stopping daemon")
 	}
 }
 
-func (gd *GRPCDaemon) Bump() {
-	cl := newClient()
+func (gd *CacheMem) Bump() {
+	cl, _ := gd.Client()
 
-	if _, err := cl.Call("alive"); err != nil {
+	if _, err := cl.Send(Request{Command: "bump"}); err != nil {
 		fmt.Println("error bumping daemon")
 	}
 }
