@@ -72,10 +72,10 @@ func (gt *GRPCTransport) Client(d *CacheMem) (Client, error) {
 
 func (gt *GRPCTransport) Initialize(d *CacheMem) error {
 	gt.server = gorpc.NewUnixServer("/tmp/transport.sock", func(clientAddr string, request interface{}) interface{} {
-		fmt.Println("got request", request)
 
 		// keep daemon alive
 		d.Alive()
+
 		credStore := d.Creds()
 
 		switch request.(type) {
@@ -83,7 +83,9 @@ func (gt *GRPCTransport) Initialize(d *CacheMem) error {
 			return request
 		case Request:
 			req := request.(Request)
-			fmt.Println(req.Command)
+
+			log.Println("GRPC request:", req.Command)
+
 			switch req.Command {
 			case "add":
 				credStore[req.ServerURL] = cred{req.Username, req.Secret}
@@ -98,7 +100,6 @@ func (gt *GRPCTransport) Initialize(d *CacheMem) error {
 					ret["Username"] = cred.username
 					ret["Secret"] = cred.secret
 				}
-				fmt.Println("returning", ret)
 				return ret
 			case "list":
 				creds := make(map[string]string)
@@ -121,7 +122,7 @@ func (gt *GRPCTransport) Initialize(d *CacheMem) error {
 		return nil
 	})
 
-	fmt.Println("starting")
+	log.Println("starting GRPC server")
 	if err := gt.server.Start(); err != nil {
 		log.Fatalf("Cannot start rpc server: %s", err)
 	}

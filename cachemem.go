@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -66,21 +67,21 @@ func (gd *CacheMem) Run() {
 		for {
 			select {
 			case <-gd.alive:
-				fmt.Println("keeping alive longer")
+				log.Println("activity detected, resetting timeout")
 			case <-time.After(60 * time.Second):
-				fmt.Println("stopping because of timeout")
+				log.Println("timeout reached, signaling 'done'")
 				gd.done <- true
 				return
 			}
 		}
 	}()
 
-	fmt.Println("waiting for done")
+	log.Println("daemon started, waiting for requests")
 	<-gd.done
-	fmt.Println("done received")
+	log.Println("done signal received, shutting down...")
 	gd.Transport.Shutdown(gd)
 
-	fmt.Println("all done")
+	log.Println("shutdown complete")
 }
 
 type cred struct {
@@ -95,7 +96,7 @@ func (gd *CacheMem) Stop() {
 	cl, _ := gd.Client()
 
 	if _, err := cl.Send(Request{Command: "stop"}); err != nil {
-		fmt.Println("error stopping daemon")
+		fmt.Println("error sending stop signal")
 	}
 }
 
@@ -103,6 +104,6 @@ func (gd *CacheMem) Bump() {
 	cl, _ := gd.Client()
 
 	if _, err := cl.Send(Request{Command: "bump"}); err != nil {
-		fmt.Println("error bumping daemon")
+		fmt.Println("error sending bump signal")
 	}
 }
