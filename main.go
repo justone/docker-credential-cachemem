@@ -79,4 +79,5 @@ func ensureDaemon(cm *CacheMem) {
 	defer cntxt.Release()
 
 	cm.Run()
+	os.Exit(0)
 }
