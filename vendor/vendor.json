@@ -1,0 +1,37 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "IIt+7+2TNuLxJN9izdLB+xoJWL8=",
+			"path": "github.com/casimir/xdg-go",
+			"revision": "372ccc2180dab73316615641d5617c5ed3e35529",
+			"revisionTime": "2016-03-29T19:54:04Z"
+		},
+		{
+			"checksumSHA1": "4u6EMQqD1zIqOHp76zQFLVH5V8U=",
+			"path": "github.com/docker/docker-credential-helpers/credentials",
+			"revision": "19b711cc92fbaa47533646fa8adb457d199c99e1",
+			"revisionTime": "2018-02-14T07:13:21Z"
+		},
+		{
+			"checksumSHA1": "gEjGS03N1eysvpQ+FCHTxPcbxXc=",
+			"path": "github.com/kardianos/osext",
+			"revision": "ae77be60afb1dcacde03767a8c37337fad28ac14",
+			"revisionTime": "2017-05-10T13:15:34Z"
+		},
+		{
+			"checksumSHA1": "CrwV2Az3LIl8uFhA1/wCdXQsCi0=",
+			"path": "github.com/sevlyar/go-daemon",
+			"revision": "45a2ba1b7c6710a044163fa109bf08d060bc3afa",
+			"revisionTime": "2018-05-02T15:13:47Z"
+		},
+		{
+			"checksumSHA1": "+3DSLmsd2v3m5y2T0Z5a5QgT/a8=",
+			"path": "github.com/valyala/gorpc",
+			"revision": "908281bef77441f2d0ec1792189b4032a1dace0c",
+			"revisionTime": "2016-05-19T17:16:14Z"
+		}
+	],
+	"rootPath": "github.com/justone/docker-credential-cachemem"
+}
