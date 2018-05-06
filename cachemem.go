@@ -68,7 +68,7 @@ func (gd *CacheMem) Run() {
 			select {
 			case <-gd.alive:
 				log.Println("activity detected, resetting timeout")
-			case <-time.After(60 * time.Second):
+			case <-time.After(4 * 60 * time.Minute):
 				log.Println("timeout reached, signaling 'done'")
 				gd.done <- true
 				return
