@@ -23,5 +23,7 @@ _testmain.go
 *.test
 *.prof
 
-docker-credential-cachemem
+docker-credential-cachemem*
 .nvimlog
+
+desc
